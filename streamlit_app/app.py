@@ -19,73 +19,133 @@ st.set_page_config(
 if "report" not in st.session_state:
     st.session_state.report = None
 
+if "messages" not in st.session_state:
+    st.session_state.messages: List[dict] = []
+
 
 def _slugify(text: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     return slug or "report"
 
 
-def _split_lines(value: str) -> List[str]:
-    return [line.strip() for line in value.splitlines() if line.strip()]
+def _split_driver_line(text: str) -> List[str]:
+    parts = re.split(r"[;,•]", text)
+    return [part.strip("-• ").strip() for part in parts if part.strip("-• ").strip()]
+
+
+def _parse_prompt(prompt: str) -> EventInput:
+    lines_raw = prompt.splitlines()
+    lines = [line.strip() for line in lines_raw if line.strip()]
+
+    name = ""
+    timing = ""
+    drivers: List[str] = []
+    description_parts: List[str] = []
+    capture_drivers = False
+
+    for raw_line in lines_raw:
+        line = raw_line.strip()
+        if not line:
+            capture_drivers = False
+            continue
+
+        lower = line.lower()
+        if lower.startswith("event:"):
+            name = line.split(":", 1)[1].strip()
+            capture_drivers = False
+            continue
+        if lower.startswith("timing:"):
+            timing = line.split(":", 1)[1].strip()
+            capture_drivers = False
+            continue
+        if lower.startswith("drivers:"):
+            rest = line.split(":", 1)[1].strip()
+            drivers.extend(_split_driver_line(rest))
+            capture_drivers = True
+            continue
+        if capture_drivers and (line.startswith("-") or line.startswith("•") or line.startswith("*")):
+            drivers.append(line.lstrip("-•*").strip())
+            continue
+
+        description_parts.append(line)
+
+    if not name and lines:
+        name = lines[0]
+        description_parts = lines[1:]
+
+    if not drivers and description_parts:
+        # Attempt to infer drivers from semicolon- or comma-separated clauses in description.
+        inferred = _split_driver_line("; ".join(description_parts))
+        drivers = inferred[:4]
+
+    description = " ".join(description_parts) if description_parts else prompt.strip()
+
+    return EventInput(
+        name=name,
+        expected_timing=timing,
+        description=description,
+        key_drivers=drivers,
+    )
 
 
 def _render_placeholder():
     st.info(
-        "Provide an event headline, expected timing, narrative, and key drivers to generate a templated market "
-        "intelligence brief. Replace placeholder sources with validated research before distribution."
+        "Describe a forward-looking catalyst using the chat composer below. Include event name, expected timing, "
+        "and key drivers (e.g., `Event: ...`, `Timing: ...`, `Drivers: ...`). The engine returns a sell-side style "
+        "dashboard for refinement."
     )
     st.markdown(
         """
-        **Workflow tips**
+        **Example prompt**
 
-        - Capture catalysts, timeline markers, and principal stakeholders.
-        - Drivers inform macro themes, sector positioning, and opportunity mapping.
-        - Use the export button for Markdown handoff into your research knowledge base.
+        ```
+        Event: India announces national semiconductor incentive expansion
+        Timing: Cabinet approval expected Q1 2025
+        Drivers: $10B subsidy pool; anchor fabs from TSMC/Samsung; easing of import tariffs on lithography tools
+        Narrative: Delhi accelerates chip sovereignty push to attract global foundries, coordinate with Quad allies, and reduce supply chain risk.
+        ```
+        """
+    )
+    st.markdown(
+        """
+        The latest dashboard appears below the chat window. Use the export controls for Markdown or CSV handoff.
         """
     )
 
 
 st.title("Global Event-Driven Market Intelligence Analyst")
 st.markdown(
-    "Identify a forward catalyst to generate a cross-sector opportunity set aligned with an institutional briefing format."
+    "Describe a forward catalyst to generate a cross-sector opportunity set aligned with a sell-side briefing format."
 )
 
-with st.form("event_form"):
-    st.subheader("1. Context Gathering")
-    st.caption(
-        "Summarize the event narrative, expected timeline, and catalysts. The engine returns a sell-side style brief "
-        "for analyst refinement."
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+
+def _store_report(report_data: dict):
+    st.session_state.report = report_data
+    ack = (
+        f"Generated assessment for **{report_data['event_name']}** "
+        f"({report_data['market_impact']['sentiment']} sentiment). Scroll to view the dashboard."
     )
+    st.session_state.messages.append({"role": "assistant", "content": ack})
 
-    name = st.text_input("Event Headline", placeholder="e.g., EU unveils continent-wide AI safety regime")
-    expected_timing = st.text_input("Expected Timing", placeholder="e.g., Q2 2026 (formal legislation vote)")
-    description = st.text_area(
-        "Event Narrative",
-        placeholder="Summarize what is happening, key actors, and the policy or technology pivot expected.",
-        height=140,
-    )
-    drivers_text = st.text_area(
-        "Key Drivers & Catalysts",
-        placeholder="List each driver on a new line (e.g., Subsidy outline, Export control easing, Corporate capex commitments)",
-        height=140,
-    )
 
-    col_submit, col_reset = st.columns([1, 1])
-    generate = col_submit.form_submit_button("Generate Assessment", use_container_width=True)
-    reset = col_reset.form_submit_button("Reset", use_container_width=True)
+def _trigger_rerun():
+    rerun_fn = getattr(st, "rerun", None) or getattr(st, "experimental_rerun", None)
+    if rerun_fn:
+        rerun_fn()
 
-    if reset:
-        st.session_state.report = None
-        st.experimental_rerun()
 
-    if generate:
-        event_input = EventInput(
-            name=name,
-            expected_timing=expected_timing,
-            description=description,
-            key_drivers=_split_lines(drivers_text),
-        )
-        st.session_state.report = build_mock_report(event_input)
+prompt = st.chat_input("Event, timing, drivers… (use Event:/Timing:/Drivers: for best results)")
+
+if prompt:
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    event_input = _parse_prompt(prompt)
+    report = build_mock_report(event_input)
+    _store_report(report)
+    _trigger_rerun()
 
 
 st.divider()
