@@ -1,11 +1,21 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import OpportunityTable from './OpportunityTable';
 import { AssessmentReport } from '../types';
+import formatReportAsMarkdown from '../utils/reportFormatter';
 
 interface ImpactAssessmentProps {
     report: AssessmentReport | null;
     loading: boolean;
 }
+
+const buildFileName = (eventName: string): string => {
+    const slug = eventName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    const suffix = slug ? ` - ${slug}` : '';
+    return `Global Event-Driven Market Intelligence Analyst${suffix}.md`;
+};
 
 const ImpactAssessment: React.FC<ImpactAssessmentProps> = ({ report, loading }) => {
     if (loading) {
@@ -43,12 +53,36 @@ const ImpactAssessment: React.FC<ImpactAssessmentProps> = ({ report, loading }) 
 
     const { headlineSummary, eventContext, marketImpact, opportunities, summaryInsights, riskNote, citations, generatedAt } =
         report;
+    const handleDownload = useCallback(() => {
+        if (!report) {
+            return;
+        }
+        const markdown = formatReportAsMarkdown(report);
+        const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = buildFileName(report.eventName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 750);
+    }, [report]);
 
     return (
         <section className="panel">
             <header className="panel__header">
-                <h2>Market Intelligence Output</h2>
-                <span className="panel__timestamp">Generated: {new Date(generatedAt).toLocaleString()}</span>
+                <div className="panel__header-top">
+                    <div>
+                        <h2>Market Intelligence Output</h2>
+                        <span className="panel__timestamp">Generated: {new Date(generatedAt).toLocaleString()}</span>
+                    </div>
+                    <div className="panel__header-actions">
+                        <button type="button" className="btn btn--secondary" onClick={handleDownload}>
+                            Download Markdown
+                        </button>
+                    </div>
+                </div>
             </header>
 
             <div className="panel__body">

@@ -43,6 +43,7 @@ export interface OpportunityRow {
 
 export interface AssessmentReport {
     generatedAt: string;
+    eventName: string;
     headlineSummary: string;
     eventContext: EventContext;
     marketImpact: MarketImpact;

@@ -544,6 +544,7 @@ export const buildMockReport = (input: EventInput): AssessmentReport => {
 
     return {
         generatedAt: new Date().toISOString(),
+        eventName,
         headlineSummary,
         eventContext,
         marketImpact,
