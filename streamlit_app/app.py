@@ -6,7 +6,8 @@ from typing import List
 import pandas as pd
 import streamlit as st
 
-from report_engine import EventInput, build_mock_report
+from llm_client import generate_report
+from report_engine import EventInput
 from report_formatter import format_report_as_markdown
 
 
@@ -123,12 +124,14 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 
-def _store_report(report_data: dict):
+def _store_report(report_data: dict, source_note: str):
     st.session_state.report = report_data
     ack = (
         f"Generated assessment for **{report_data['event_name']}** "
         f"({report_data['market_impact']['sentiment']} sentiment). Scroll to view the dashboard."
     )
+    if source_note:
+        ack += f"\n\n_{source_note}_"
     st.session_state.messages.append({"role": "assistant", "content": ack})
 
 
@@ -143,8 +146,8 @@ prompt = st.chat_input("Event, timing, drivers… (use Event:/Timing:/Drivers: f
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     event_input = _parse_prompt(prompt)
-    report = build_mock_report(event_input)
-    _store_report(report)
+    report, source = generate_report(event_input)
+    _store_report(report, source)
     _trigger_rerun()
 
 

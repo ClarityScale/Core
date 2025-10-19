@@ -25,6 +25,19 @@ Open the URL Streamlit prints (typically `http://localhost:8501`) in your browse
 
 Replace placeholder sources and narrative language with verified research before distribution.
 
+### LLM integration
+
+Set the following environment variables before launching Streamlit to enable DeepSeek:
+
+```bash
+export DEEPSEEK_API_KEY="your_api_key"
+# optional overrides:
+# export DEEPSEEK_MODEL="deepseek-chat"
+# export DEEPSEEK_BASE_URL="https://api.deepseek.com"
+```
+
+If the key is absent or the API call fails, the app automatically falls back to the deterministic mock engine and annotates the dashboard accordingly.
+
 ### Prompt structure
 
 For the best results, include labelled fields inside your message:
