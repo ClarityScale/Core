@@ -1,4 +1,3 @@
-import io
 import re
 from datetime import datetime
 from typing import List
@@ -8,7 +7,6 @@ import streamlit as st
 
 from llm_client import generate_report
 from report_engine import EventInput
-from report_formatter import format_report_as_markdown
 
 
 st.set_page_config(
@@ -22,11 +20,6 @@ if "report" not in st.session_state:
 
 if "messages" not in st.session_state:
     st.session_state.messages: List[dict] = []
-
-
-def _slugify(text: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-    return slug or "report"
 
 
 def _split_driver_line(text: str) -> List[str]:
@@ -109,7 +102,7 @@ def _render_placeholder():
     )
     st.markdown(
         """
-        The latest dashboard appears below the chat window. Use the export controls for Markdown or CSV handoff.
+        The latest dashboard appears below the chat window.
         """
     )
 
@@ -161,44 +154,46 @@ if not report:
 
 
 generated_at = datetime.fromisoformat(report["generated_at"]).strftime("%Y-%m-%d %H:%M:%S UTC")
-markdown_report = format_report_as_markdown(report)
-file_name = f"global-event-driven-market-intelligence-analyst-{_slugify(report['event_name'])}.md"
-
-st.subheader("Export")
-st.download_button(
-    "Download Markdown",
-    data=markdown_report.encode("utf-8"),
-    file_name=file_name,
-    mime="text/markdown",
-    use_container_width=True,
-)
 st.caption(f"Generated: {generated_at}")
 
 st.divider()
 
-st.subheader("1. Headline Summary")
-st.write(report["headline_summary"])
-
-st.subheader("2. Event Context")
 context = report["event_context"]
-st.write(context["overview"])
-context_cols = st.columns(2)
-context_cols[0].metric("Timing", context["timing"])
-context_cols[1].metric("Significance", context["significance"])
-st.markdown("**Key Drivers**")
-st.markdown("\n".join(f"- {point}" for point in context["context_points"]))
-
-st.subheader("3. Market Impact Analysis")
 impact = report["market_impact"]
-impact_cols = st.columns(3)
-impact_cols[0].metric("Sentiment", impact["sentiment"])
-impact_cols[1].markdown("**Macro Themes**\n" + "\n".join(f"- {theme}" for theme in impact["macro_themes"]))
-impact_cols[2].markdown("**Sector Exposure**\n" + "\n".join(f"- {outlook}" for outlook in impact["sector_outlook"]))
 
-horizon_df = pd.DataFrame(impact["horizon_impacts"])
-st.table(horizon_df)
+col_left, col_right = st.columns(2)
 
-st.subheader("4. Investment Opportunity Table (20+ entries)")
+with col_left:
+    st.subheader("Headline Summary")
+    st.write(report["headline_summary"])
+
+    st.subheader("Event Context")
+    st.write(context["overview"])
+    if context["timing"]:
+        st.markdown(f"**Timing:** {context['timing']}")
+    if context["significance"]:
+        st.markdown(f"**Significance:** {context['significance']}")
+    if context["context_points"]:
+        st.markdown("**Key Drivers**")
+        st.markdown("\n".join(f"- {point}" for point in context["context_points"]))
+
+with col_right:
+    st.subheader("Market Impact Analysis")
+    st.metric("Sentiment", impact["sentiment"])
+    if impact["macro_themes"]:
+        st.markdown("**Macro Themes**")
+        st.markdown("\n".join(f"- {theme}" for theme in impact["macro_themes"]))
+    if impact["sector_outlook"]:
+        st.markdown("**Sector Exposure**")
+        st.markdown("\n".join(f"- {outlook}" for outlook in impact["sector_outlook"]))
+
+    horizon_df = pd.DataFrame(impact["horizon_impacts"])
+    st.markdown("**Horizon Outlook**")
+    st.table(horizon_df)
+
+st.divider()
+
+st.subheader("Investment Opportunity Table (20+ entries)")
 opportunities = report["opportunities"]
 opportunity_df = pd.DataFrame(opportunities)
 opportunity_df["Source(s)"] = opportunity_df["sources"].apply(lambda items: "; ".join(items))
@@ -217,22 +212,3 @@ opportunity_df = opportunity_df.rename(
     }
 )
 st.dataframe(opportunity_df, use_container_width=True, height=600)
-
-csv_buffer = io.StringIO()
-opportunity_df.to_csv(csv_buffer, index=False)
-st.download_button(
-    "Download Opportunities (CSV)",
-    data=csv_buffer.getvalue(),
-    file_name=f"opportunities-{_slugify(report['event_name'])}.csv",
-    mime="text/csv",
-    use_container_width=True,
-)
-
-st.subheader("5. Summary Insights")
-st.markdown("\n".join(f"- {insight}" for insight in report["summary_insights"]))
-
-st.subheader("6. Risk Note")
-st.write(report["risk_note"])
-
-st.subheader("7. Citations")
-st.markdown("\n".join(f"- {citation}" for citation in report["citations"]))

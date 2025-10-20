@@ -8,9 +8,8 @@ from openai import OpenAI
 
 from report_engine import EventInput, build_mock_report
 
-DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-DEEPSEEK_ENABLED = bool(os.getenv("DEEPSEEK_API_KEY"))
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_ENABLED = bool(os.getenv("OPENAI_API_KEY"))
 
 SYSTEM_PROMPT = """You are an institutional research analyst.
 Return ONLY valid JSON that matches this schema:
@@ -131,13 +130,12 @@ def _ensure_structure(raw: Dict[str, object], event_input: EventInput) -> Dict[s
     return report
 
 
-def _call_deepseek(event_input: EventInput) -> Tuple[Optional[Dict[str, object]], Optional[str]]:
-    if not DEEPSEEK_ENABLED:
-        return None, "DeepSeek API key not configured."
+def _call_openai(event_input: EventInput) -> Tuple[Optional[Dict[str, object]], Optional[str]]:
+    if not OPENAI_ENABLED:
+        return None, "OpenAI API key not configured."
 
     client = OpenAI(
-        api_key=os.environ["DEEPSEEK_API_KEY"],
-        base_url=DEEPSEEK_BASE_URL,
+        api_key=os.environ["OPENAI_API_KEY"],
     )
 
     drivers = event_input.key_drivers or ["Driver details not specified"]
@@ -150,7 +148,7 @@ def _call_deepseek(event_input: EventInput) -> Tuple[Optional[Dict[str, object]]
     )
 
     response = client.chat.completions.create(
-        model=DEEPSEEK_MODEL,
+        model=OPENAI_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_message},
@@ -168,19 +166,19 @@ def _call_deepseek(event_input: EventInput) -> Tuple[Optional[Dict[str, object]]
 
 
 def generate_report(event_input: EventInput) -> Tuple[Dict[str, object], str]:
-    if not DEEPSEEK_ENABLED:
+    if not OPENAI_ENABLED:
         report = build_mock_report(event_input)
-        return report, "DeepSeek disabled; using rule-based template."
+        return report, "OpenAI disabled; using rule-based template."
 
     try:
-        report, error = _call_deepseek(event_input)
+        report, error = _call_openai(event_input)
         if report:
-            return report, f"DeepSeek ({DEEPSEEK_MODEL}) response."
-        raise RuntimeError(error or "Unknown DeepSeek error.")
+            return report, f"OpenAI ({OPENAI_MODEL}) response."
+        raise RuntimeError(error or "Unknown OpenAI error.")
     except Exception as exc:
         fallback = build_mock_report(event_input)
         fallback["summary_insights"].append(
             "LLM generation unavailable—displaying deterministic template output for review."
         )
-        note = f"DeepSeek request failed ({exc}); reverted to rule-based template."
+        note = f"OpenAI request failed ({exc}); reverted to rule-based template."
         return fallback, note
